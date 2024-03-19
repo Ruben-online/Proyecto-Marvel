@@ -1,3 +1,4 @@
+# librerias
 import requests
 import hashlib
 import time
