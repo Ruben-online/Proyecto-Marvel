@@ -177,3 +177,164 @@ class CharactersWindow(QDialog):
     def open_characters_list(self):
         characters_list_window = CharactersListWindow()
         characters_list_window.exec()
+
+# Clase para la ventana 'Lista de comics'
+class ComicsListWindow(QDialog):
+    def __init__(self):
+        super().__init__()
+
+        self.setWindowTitle("Listado de Comics")
+        self.setFixedSize(1200, 600)
+
+        layout = QVBoxLayout()
+
+        # Campo de búsqueda
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Buscar comics por nombre...")
+        self.search_input.returnPressed.connect(self.search_comics)
+        layout.addWidget(self.search_input)
+
+        self.comics_container = QWidget()
+        self.comics_layout = QGridLayout()
+        self.comics_container.setLayout(self.comics_layout)
+        layout.addWidget(self.comics_container)
+
+        # Botones de navegación
+        self.prev_button = QPushButton("Anterior")
+        self.prev_button.clicked.connect(self.load_prev_comics)
+        self.next_button = QPushButton("Siguiente")
+        self.next_button.clicked.connect(self.load_next_comics)
+
+        self.page = 0
+        self.total_comics = 0
+        self.comics_per_page = 10
+
+        self.load_comics()
+
+        nav_layout = QHBoxLayout()
+        nav_layout.addWidget(self.prev_button)
+        nav_layout.addWidget(self.next_button)
+        layout.addLayout(nav_layout)
+
+        self.setLayout(layout)
+
+    # Cargar la info de los comics
+    def load_comics(self):
+        public_key = "f9712edbc70c02735339a12234d8b1ff"
+        private_key = "aa753940dacd70f1d2f39da2f8557cdb8a2d8084"
+        timestamp = str(int(time.time()))
+        hash_value = hashlib.md5((timestamp + private_key + public_key).encode('utf-8')).hexdigest()
+
+        base_url = "http://gateway.marvel.com/v1/public/comics"
+        params = {
+            "ts": timestamp,
+            "apikey": public_key,
+            "hash": hash_value,
+            "limit": self.comics_per_page,
+            "offset": self.page * self.comics_per_page
+        }
+
+        response = requests.get(base_url, params=params)
+        data = response.json()
+
+        if response.status_code == 200:
+            self.total_comics = data["data"]["total"]
+            self.update_pagination_buttons()
+
+            comics = data["data"]["results"]
+            self.show_comics(comics)
+        else:
+            print(f"Error en la solicitud: {response.status_code}")
+            print(response.text)
+
+    # Cargar las imagenes
+    def load_image(self, url):
+        response = requests.get(url)
+        image = QPixmap()
+        if response.status_code == 200:
+            image.loadFromData(response.content)
+        else:
+            print(f"Error al cargar la imagen: {response.status_code}")
+        return image
+
+    # Funcion para mostrar la info de los comics en la ventana 'Lista de comics'
+    def show_comics(self, comics):
+        # Limpiar el layout antes de cargar nuevos cómics
+        self.clear_comics_container()
+
+        row = 0
+        col = 0
+
+        for comic in comics:
+            comic_name = comic["title"]
+            comic_img_url = f"{comic["thumbnail"]["path"]}/portrait_uncanny.{comic["thumbnail"]["extension"]}"
+
+            try:
+                comic_img = QLabel()
+                pixmap = self.load_image(comic_img_url)
+                comic_img.setPixmap(pixmap)
+                self.comics_layout.addWidget(comic_img, row, col)
+
+                comic_label = QLabel(f"{comic_name}")
+                comic_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.comics_layout.addWidget(comic_label, row + 1, col)
+
+                col += 1
+                if col >= 5:
+                    row += 2
+                    col = 0
+            except Exception as e:
+                print(f"Error al cargar la imagen: {e}")
+                print(f"URL de la imagen: {comic_img_url}")
+
+    # Funcion que permite avanzar y regresar
+    def update_pagination_buttons(self):
+        self.prev_button.setEnabled(self.page > 0)
+        self.next_button.setEnabled((self.page + 1) * self.comics_per_page < self.total_comics)
+
+    # Funcion para el boton regresar, regresa a la pagina anterior
+    def load_prev_comics(self):
+        self.page -= 1
+        self.load_comics()
+
+    # Funcion para el boton siguiente, avanza a la siguiente pagina
+    def load_next_comics(self):
+        self.page += 1
+        self.load_comics()
+
+    # API request
+    def search_comics(self):
+        search_text = self.search_input.text()
+        if search_text:
+            public_key = "f9712edbc70c02735339a12234d8b1ff"
+            private_key = "aa753940dacd70f1d2f39da2f8557cdb8a2d8084"
+            timestamp = str(int(time.time()))
+            hash_value = hashlib.md5((timestamp + private_key + public_key).encode('utf-8')).hexdigest()
+
+            base_url = "http://gateway.marvel.com/v1/public/comics"
+            params = {
+                "ts": timestamp,
+                "apikey": public_key,
+                "hash": hash_value,
+                "limit": self.comics_per_page,
+                "titleStartsWith": search_text
+            }
+
+            response = requests.get(base_url, params=params)
+            data = response.json()
+
+            if response.status_code == 200:
+                self.clear_comics_container()
+                self.total_comics = data["data"]["total"]
+                comics = data["data"]["results"]
+                self.show_comics(comics)
+            else:
+                print(f"Error en la solicitud: {response.status_code}")
+                print(response.text)
+
+    # Para borrar la informacion, asi al avanzar, no se ponen una encima de la otra. Limpia antes de avanzar
+    def clear_comics_container(self):
+        for i in reversed(range(self.comics_layout.count())):
+            widget = self.comics_layout.itemAt(i).widget()
+            if widget is not None:
+                widget.setParent(None)
