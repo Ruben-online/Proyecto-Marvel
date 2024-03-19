@@ -1,0 +1,44 @@
+import requests
+import hashlib
+import time
+from keys import public_key, private_key
+
+public_key = public_key
+private_key = private_key
+timestamp = str(int(time.time()))
+hash_value = hashlib.md5((timestamp + private_key + public_key).encode('utf-8')).hexdigest()
+
+base_url = "http://gateway.marvel.com/v1/public/comics"
+params = {
+    'ts': timestamp,
+    'apikey': public_key,
+    'hash': hash_value,
+    'limit': 100  # Ajusta según tus necesidades
+}
+
+all_comics_data = []
+
+offset = 0
+while True:
+    params['offset'] = offset
+
+    response = requests.get(base_url, params=params)
+    data = response.json()
+
+    if response.status_code != 200:
+        print(f"Error en la solicitud: {response.status_code}")
+        print(response.text)
+        break
+
+    comics_data = data['data']['results']
+    all_comics_data.extend(comics_data)
+
+    if len(comics_data) < params['limit']:
+        # Si la cantidad de resultados es menor que el límite, hemos llegado al final
+        break
+
+    offset += params['limit']
+
+# Ahora 'all_comics_data' contiene la información de todos los cómics
+for comic in all_comics_data:
+    print(f"Título: {comic['title']}, Descripción: {comic['description']}")
