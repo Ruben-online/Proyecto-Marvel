@@ -338,3 +338,173 @@ class ComicsListWindow(QDialog):
             widget = self.comics_layout.itemAt(i).widget()
             if widget is not None:
                 widget.setParent(None)
+
+
+# Clase para la ventana 'Lista de personajes'
+class CharactersListWindow(QDialog):
+    def __init__(self):
+        super().__init__()
+
+        self.setWindowTitle("Listado de Personajes")
+        self.setFixedSize(1200, 600)
+
+        layout = QVBoxLayout()
+
+        # Buscar
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Buscar personajes por nombre...")
+        self.search_input.returnPressed.connect(self.search_characters)
+        layout.addWidget(self.search_input)
+
+        self.characters_container = QWidget()
+        self.characters_layout = QGridLayout()
+        self.characters_container.setLayout(self.characters_layout)
+        layout.addWidget(self.characters_container)
+
+        # Botones de navegación
+        self.prev_button = QPushButton("Anterior")
+        self.prev_button.clicked.connect(self.load_prev_characters)
+        self.next_button = QPushButton("Siguiente")
+        self.next_button.clicked.connect(self.load_next_characters)
+
+        self.page = 0
+        self.total_characters = 0
+        self.characters_per_page = 10
+
+        self.load_characters()
+
+        nav_layout = QHBoxLayout()
+        nav_layout.addWidget(self.prev_button)
+        nav_layout.addWidget(self.next_button)
+        layout.addLayout(nav_layout)
+
+        self.setLayout(layout)
+
+    # Cargar la informacion de los personajes API
+    def load_characters(self):
+        public_key = "f9712edbc70c02735339a12234d8b1ff"
+        private_key = "aa753940dacd70f1d2f39da2f8557cdb8a2d8084"
+        timestamp = str(int(time.time()))
+        hash_value = hashlib.md5((timestamp + private_key + public_key).encode('utf-8')).hexdigest()
+
+        base_url = "http://gateway.marvel.com/v1/public/characters"
+        params = {
+            "ts": timestamp,
+            "apikey": public_key,
+            "hash": hash_value,
+            "limit": self.characters_per_page,
+            "offset": self.page * self.characters_per_page
+        }
+
+        response = requests.get(base_url, params=params)
+        data = response.json()
+
+        if response.status_code == 200:
+            self.total_characters = data["data"]["total"]
+            self.update_pagination_buttons()
+
+            characters = data["data"]["results"]
+            self.show_characters(characters)
+        else:
+            print(f"Error en la solicitud: {response.status_code}")
+            print(response.text)
+
+    # Cargar las imagenes
+    def load_image(self, url):
+        response = requests.get(url)
+        image = QPixmap()
+        if response.status_code == 200:
+            image.loadFromData(response.content)
+        else:
+            print(f"Error al cargar la imagen: {response.status_code}")
+        return image
+
+    # Mostrar la informacion de los personajes
+    def show_characters(self, characters):
+        # Limpiar el layout antes de cargar nuevos personajes
+        self.clear_characters_container()
+
+        row = 0
+        col = 0
+
+        for character in characters:
+            character_name = character["name"]
+            character_img_url = f"{character["thumbnail"]['path']}/portrait_uncanny.{character["thumbnail"]["extension"]}"
+
+            try:
+                character_img = QLabel()
+                pixmap = self.load_image(character_img_url)
+                character_img.setPixmap(pixmap)
+                self.characters_layout.addWidget(character_img, row, col)
+
+                character_label = QLabel(f"{character_name}")
+                character_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.characters_layout.addWidget(character_label, row + 1, col)
+
+                col += 1
+                if col >= 5:
+                    row += 2
+                    col = 0
+            except Exception as e:
+                print(f"Error al cargar la imagen: {e}")
+                print(f"URL de la imagen: {character_img_url}")
+
+    # Funcion que permite avanzar y regresar
+    def update_pagination_buttons(self):
+        self.prev_button.setEnabled(self.page > 0)
+        self.next_button.setEnabled((self.page + 1) * self.characters_per_page < self.total_characters)
+
+    # Pagina anterior
+    def load_prev_characters(self):
+        self.page -= 1
+        self.load_characters()
+
+    # Siguiente pagina
+    def load_next_characters(self):
+        self.page += 1
+        self.load_characters()
+
+    # Request API personajes
+    def search_characters(self):
+        search_text = self.search_input.text()
+        if search_text:
+            public_key = "f9712edbc70c02735339a12234d8b1ff"
+            private_key = "aa753940dacd70f1d2f39da2f8557cdb8a2d8084"
+            timestamp = str(int(time.time()))
+            hash_value = hashlib.md5((timestamp + private_key + public_key).encode('utf-8')).hexdigest()
+
+            base_url = "http://gateway.marvel.com/v1/public/characters"
+            params = {
+                "ts": timestamp,
+                "apikey": public_key,
+                "hash": hash_value,
+                "limit": self.characters_per_page,
+                "nameStartsWith": search_text
+            }
+
+            response = requests.get(base_url, params=params)
+            data = response.json()
+
+            if response.status_code == 200:
+                self.clear_characters_container()
+                self.total_characters = data["data"]["total"]
+                characters = data["data"]["results"]
+                self.show_characters(characters)
+            else:
+                print(f"Error en la solicitud: {response.status_code}")
+                print(response.text)
+
+    # Para borrar la informacion, asi al avanzar, no se ponen una encima de la otra. Limpia antes de avanzar
+    def clear_characters_container(self):
+        for i in reversed(range(self.characters_layout.count())):
+            widget = self.characters_layout.itemAt(i).widget()
+            if widget is not None:
+                widget.setParent(None)
+
+
+
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    main_window = MainWindow()
+    main_window.show()
+    sys.exit(app.exec())
